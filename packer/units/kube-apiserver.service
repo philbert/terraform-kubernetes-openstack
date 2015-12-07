@@ -1,6 +1,8 @@
 [Unit]
 Description=Kubernetes API Server
 Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+Requires=flanneld.service
+After=flanneld.service
 
 [Service]
 EnvironmentFile=/etc/kubernetes.env

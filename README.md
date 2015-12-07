@@ -71,7 +71,13 @@ ssh-add ~/.ssh/id_rsa
 
 ```
 cd terraform
-terraform plan
+export DISCOVERY_URL=$(curl -s 'https://discovery.etcd.io/new?size=1')
+terraform plan \
+      -var "username=$OS_USERNAME" \
+      -var "password=$OS_PASSWORD" \
+      -var "tenant=$OS_TENANT_NAME" \
+      -var "auth_url=$OS_AUTH_URL" \
+      -var "discovery_url=${DISCOVERY_URL}"
 terraform apply
 ```
 

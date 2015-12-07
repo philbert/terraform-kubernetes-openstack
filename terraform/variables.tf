@@ -1,8 +1,6 @@
-variable "account_file" {
-    default = "/etc/kubestack-account.json"
+variable "discovery_url" {
+    default = ""
 }
-
-variable "discovery_url" {}
 
 variable "flannel_backend" {
     default = "vxlan"
@@ -12,8 +10,12 @@ variable "flannel_network" {
     default = "10.10.0.0/16"
 }
 
-variable "image" {
-    default = "kubestack-0-17-1-v20150606"
+variable "etcd_image" {
+    default = "coreos"
+}
+
+variable "kubernetes_image" {
+    default = "kubernetes"
 }
 
 variable "project" {}
@@ -26,12 +28,6 @@ variable "region" {
     default = "us-central1"
 }
 
-variable "sshkey_metadata" {}
-
-variable "token_auth_file" {
-    default = "secrets/tokens.csv"
-}
-
 variable "worker_count" {
     default = 3
 }
@@ -42,4 +38,41 @@ variable "zone" {
 
 variable "cluster_name" {
     default = "testing"
+}
+
+variable "network_name" {
+    default = "internal"
+}
+
+variable "floatingip_pool" {
+    default = "external"
+}
+
+variable "kubernetes_flavor" {
+    default = "m1.medium"
+}
+
+variable "etcd_flavor" {
+    default = "m1.small"
+}
+
+variable "username" {
+  description = "Your openstack username"
+}
+
+variable "password" {
+  description = "Your openstack password"
+}
+
+variable "tenant" {
+  description = "Your openstack tenant/project"
+}
+
+variable "auth_url" {
+  description = "Your openstack auth URL"
+}
+
+variable "public_key_path" {
+  description = "The path of the ssh pub key"
+  default = "~/.ssh/id_rsa.pub"
 }
