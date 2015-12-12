@@ -18,6 +18,7 @@ coreos:
       command: start
   flannel:
     interface: $private_ipv4
+    etcd_endpoints: ${etcd_servers}
   etcd2:
     # generate a new token for each unique cluster from https://discovery.etcd.io/new
     discovery: ${discovery_url}

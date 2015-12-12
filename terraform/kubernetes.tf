@@ -1,5 +1,5 @@
-output "kubernetes-api-server" {
-    value = "https://${openstack_networking_floatingip_v2.controller.0.address}:6443"
+output "kubernetes-controller" {
+    value = "$ ssh -A core@${openstack_networking_floatingip_v2.controller.0.address}"
 }
 
 resource "template_file" "etcd_cloud_init" {
@@ -26,16 +26,27 @@ resource "template_file" "compute_cloud_init" {
     vars {
         flannel_network = "${var.flannel_network}"
         flannel_backend = "${var.flannel_backend}"
-        etcd_servers = "http://127.0.0.1:2379"
+        etcd_servers = "${join(",", "${formatlist("http://%s:2379", openstack_compute_instance_v2.controller.*.network.0.fixed_ip_v4)}")}"
         cluster_token = "${var.cluster_name}"
         discovery_url = "${var.discovery_url}"
     }
 }
 
-resource "template_file" "kubernetes" {
+resource "template_file" "kubernetes_controller" {
     filename = "kubernetes.env"
     vars {
-        api_servers = "http://${openstack_networking_floatingip_v2.controller.0.address}:8080"
+        api_servers = "http://127.0.0.1:8080"
+        etcd_servers = "http://127.0.0.1:2379"
+        flannel_backend = "${var.flannel_backend}"
+        flannel_network = "${var.flannel_network}"
+        portal_net = "${var.portal_net}"
+    }
+}
+
+resource "template_file" "kubernetes_compute" {
+    filename = "kubernetes.env"
+    vars {
+        api_servers = "http://${openstack_compute_instance_v2.controller.0.network.0.fixed_ip_v4}:8080"
         etcd_servers = "http://127.0.0.1:2379"
         flannel_backend = "${var.flannel_backend}"
         flannel_network = "${var.flannel_network}"
@@ -48,49 +59,32 @@ resource "openstack_networking_floatingip_v2" "controller" {
   pool = "${var.floatingip_pool}"
 }
 
-resource "openstack_compute_keypair_v2" "kubestack" {
+resource "openstack_compute_keypair_v2" "kubernetes" {
   name = "${var.project}"
   public_key = "${file(var.public_key_path)}"
 }
 
 resource "openstack_compute_secgroup_v2" "kubernetes_controller" {
   name = "${var.project}_kubernetes_api"
-  description = "kubestack Security Group"
+  description = "kubernetes Security Group"
   rule {
     ip_protocol = "tcp"
     from_port = "22"
     to_port = "22"
     cidr = "0.0.0.0/0"
   }
-  rule {
-    ip_protocol = "tcp"
-    from_port = "6443"
-    to_port = "6443"
-    cidr = "0.0.0.0/0"
-  }
-  rule {
-    ip_protocol = "icmp"
-    from_port = "-1"
-    to_port = "-1"
-    cidr = "0.0.0.0/0"
-  }
+# uncomment this if you want to expose the API
+#  rule {
+#    ip_protocol = "tcp"
+#    from_port = "6443"
+#    to_port = "6443"
+#    cidr = "0.0.0.0/0"
+#  }
 }
 
 resource "openstack_compute_secgroup_v2" "kubernetes_internal" {
   name = "${var.project}_kubernetes_internal"
-  description = "kubestack Security Group"
-  rule {
-    ip_protocol = "tcp"
-    from_port = "22"
-    to_port = "22"
-    cidr = "0.0.0.0/0"
-  }
-  rule {
-    ip_protocol = "tcp"
-    from_port = "6443"
-    to_port = "6443"
-    cidr = "0.0.0.0/0"
-  }
+  description = "kubernetes Security Group"
   rule {
     ip_protocol = "icmp"
     from_port = "-1"
@@ -122,7 +116,7 @@ resource "openstack_compute_secgroup_v2" "kubernetes_internal" {
 #  count = "1"
 #  image_name = "${var.etcd_image}"
 #  flavor_name = "${var.etcd_flavor}"
-#  key_pair = "${openstack_compute_keypair_v2.kubestack.name}"
+#  key_pair = "${openstack_compute_keypair_v2.kubernetes.name}"
 #  network {
 #    name = "${var.network_name}"
 #  }
@@ -138,7 +132,7 @@ resource "openstack_compute_instance_v2" "controller" {
   count = "1"
   image_name = "${var.kubernetes_image}"
   flavor_name = "${var.kubernetes_flavor}"
-  key_pair = "${openstack_compute_keypair_v2.kubernetes_api.name}"
+  key_pair = "${openstack_compute_keypair_v2.kubernetes.name}"
   network {
     name = "${var.network_name}"
   }
@@ -150,7 +144,8 @@ resource "openstack_compute_instance_v2" "controller" {
   user_data = "${template_file.controller_cloud_init.rendered}"
   provisioner "remote-exec" {
     inline = [
-      "sudo cat <<'EOF' > /tmp/kubernetes.env\n${template_file.kubernetes.rendered}\nEOF",
+      "sudo cat <<'EOF' > /tmp/kubernetes.env\n${template_file.kubernetes_controller.rendered}\nEOF",
+      "sudo sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/kubernetes.env",
       "sudo mv /tmp/kubernetes.env /etc/kubernetes.env",
       "sudo mkdir -p /etc/kubernetes",
       "sudo systemctl enable flanneld",
@@ -162,7 +157,11 @@ resource "openstack_compute_instance_v2" "controller" {
       "sudo systemctl start docker",
       "sudo systemctl start kube-apiserver",
       "sudo systemctl start kube-controller-manager",
-      "sudo systemctl start kube-scheduler"
+      "sudo systemctl start kube-scheduler",
+      "/opt/bin/kubectl config set-cluster kubernetes --insecure-skip-tls-verify=true --server=https://127.0.0.1:6443",
+      "/opt/bin/kubectl config set-credentials ${var.kubernetes_user} --token='${var.kubernetes_token}'",
+      "/opt/bin/kubectl config set-context kubernetes --cluster=kubernetes --user=${var.kubernetes_user}",
+      "/opt/bin/kubectl config use-context kubernetes"
     ]
     connection {
         user = "core"
@@ -176,10 +175,10 @@ resource "openstack_compute_instance_v2" "controller" {
 
 resource "openstack_compute_instance_v2" "compute" {
   name = "${var.cluster_name}-compute${count.index}"
-  count = "1"
+  count = "${var.compute_count}"
   image_name = "${var.kubernetes_image}"
   flavor_name = "${var.kubernetes_flavor}"
-  key_pair = "${openstack_compute_keypair_v2.kubestack.name}"
+  key_pair = "${openstack_compute_keypair_v2.kubernetes.name}"
   network {
     name = "${var.network_name}"
   }
@@ -187,7 +186,8 @@ resource "openstack_compute_instance_v2" "compute" {
   user_data = "${template_file.compute_cloud_init.rendered}"
   provisioner "remote-exec" {
     inline = [
-      "sudo cat <<'EOF' > /tmp/kubernetes.env\n${template_file.kubernetes.rendered}\nEOF",
+      "sudo cat <<'EOF' > /tmp/kubernetes.env\n${template_file.kubernetes_compute.rendered}\nEOF",
+      "sudo sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/kubernetes.env",
       "sudo mv /tmp/kubernetes.env /etc/kubernetes.env",
       "sudo systemctl enable flanneld",
       "sudo systemctl enable docker",

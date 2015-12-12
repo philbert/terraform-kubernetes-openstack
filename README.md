@@ -1,6 +1,8 @@
-# Kubestack
+# Kubernetes on Openstack with Terraform
 
-Provision a Kubernetes cluster with [Packer](https://packer.io) and [Terraform](https://www.terraform.io) on Google Compute Engine.
+forked from [kelseyhightower/kubernetes](https://github.com/kelseyhightower/kubernetes)
+
+Provision a Kubernetes cluster with [Packer](https://packer.io) and [Terraform](https://www.terraform.io) on Openstack
 
 ## Status
 
@@ -10,146 +12,61 @@ Ready for testing. Over the next couple of weeks the repo should be generic enou
 
 - [Install Packer](https://packer.io/docs/installation.html)
 - [Install Terraform](https://www.terraform.io/intro/getting-started/install.html)
-- [Setup an Authentication JSON File](https://www.terraform.io/docs/providers/google/index.html#account_file)
 
-The Packer and Terraform configs assume your authentication JSON file is stored under `/etc/kubestack-account.json`
+The Packer and Terraform configs assume your authentication JSON file is stored under `/etc/kubernetes-account.json`
 
 ## Packer Images
 
 Immutable infrastructure is the future. Instead of using cloud-init to provision machines at boot we'll create a custom image using Packer.
 
-Run the packer commands below will create the following image:
+### Create the kubernetes Base Image
+
+This assumes you already have a coreos image in glance. You may need to 
+adjust `packer/settings.json` to match settings in your OpenStack cloud.
 
 ```
-kubestack-0-17-1-v20150606
-```
-
-### Create the Kubestack Base Image
-
-```
-cd packer
-packer build -var-file=settings.json kubestack.json
+$ . ~/.stackrc
+$ cd packer
+$ packer build -var-file=settings.json kubernetes.json
 ```
 
 ## Terraform
 
-Terraform will be used to declare and provision a Kubernetes cluster.
+Terraform will be used to declare and provision a Kubernetes cluster. By default it will be a single controller with a single compute node. You can add more nodes by adjusting the `compute_workers` variable.
+
+The compute workers (for now) do not have a floating ip, this means to `ssh` to them you must `ssh -A` to the controller node first.
 
 ### Prep
 
-Generate an [etcd discovery](https://coreos.com/docs/cluster-management/setup/cluster-discovery/) token:
+Ensure your local ssh-agent is running and your ssh key has been added. This step is required by the terraform provisioner.
 
 ```
-curl https://discovery.etcd.io/new?size=3
-https://discovery.etcd.io/465df9c06a9d589...
-```
-
-Edit `terraform/terraform.tfvars`. Add the required values:
-
-```
-discovery_url = "https://discovery.etcd.io/465df9c06a9d589..."
-project = "kubestack"
-sshkey_metadata = "core: ssh-rsa AAAAB3NzaC1yc2EA..."
-```
-
-- Add API tokens to `terraform/secrets/tokens.csv`. See [Kubernetes Authentication Plugins](https://github.com/GoogleCloudPlatform/kubernetes/blob/master/docs/authentication.md) for more details.
-
-Example tokens.csv
-
-```
-04b6d6bfe5bexample82db624, kelseyhightower, kelseyhightower
-```
-
-- Ensure your local ssh-agent is running and your ssh key has been added. This step is required by the terraform provisioner.
-
-```
-ssh-add ~/.ssh/id_rsa
+$ eval $(ssh-agent -s)
+$ ssh-add ~/.ssh/id_rsa
 ```
 
 
 ### Provision the Kubernetes Cluster
 
 ```
-cd terraform
-export DISCOVERY_URL=$(curl -s 'https://discovery.etcd.io/new?size=1')
-terraform plan \
+$ cd terraform
+$ export DISCOVERY_URL=$(curl -s 'https://discovery.etcd.io/new?size=1')
+$ terraform plan \
       -var "username=$OS_USERNAME" \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
       -var "auth_url=$OS_AUTH_URL" \
       -var "discovery_url=${DISCOVERY_URL}"
-terraform apply
-```
 
-If you run into the follow error try changing the GCE zone and try again.
-
-```
-The zone 'projects/kubestack/zones/us-central1-a' does not have enough resources available to fulfill the request.
-```
-
-```
-terraform destroy
-```
-
-Get a list of GCE zones.
-
-```
-gcloud compute zones list
-NAME           REGION       STATUS NEXT_MAINTENANCE TURNDOWN_DATE
-asia-east1-c   asia-east1   UP
-asia-east1-a   asia-east1   UP
-asia-east1-b   asia-east1   UP
-europe-west1-c europe-west1 UP
-europe-west1-b europe-west1 UP
-europe-west1-d europe-west1 UP
-us-central1-a  us-central1  UP
-us-central1-b  us-central1  UP
-us-central1-c  us-central1  UP
-us-central1-f  us-central1  UP
-```
-
-Edit `terraform.tfvars`
-
-```
-zone = "us-central1-b"
-```
-
-Be sure to generate a new etcd discovery token:
-
-```
-curl https://discovery.etcd.io/new?size=3
-https://discovery.etcd.io/2e5df9c06a9d590...
-```
-
-Edit `terraform.tfvars`
-
-```
-discovery_url = "https://discovery.etcd.io/2e5df9c06a9d590..."
-```
-
-Try again.
-
-```
-terraform apply
-```
-
-### Resize the number of worker nodes
-
-Edit `terraform/terraform.tfvars`. Set `worker_count` to the desired value:
-
-```
-worker_count = 3
-```
-
-Apply the changes:
-
-```
-terraform plan
-terraform apply
-```
-
-```
-Apply complete! Resources: 10 added, 0 changed, 0 destroyed.
+$ terraform apply \
+      -var "username=$OS_USERNAME" \
+      -var "password=$OS_PASSWORD" \
+      -var "tenant=$OS_TENANT_NAME" \
+      -var "auth_url=$OS_AUTH_URL" \
+      -var "discovery_url=${DISCOVERY_URL}"
+...
+...
+Apply complete! Resources: 12 added, 0 changed, 0 destroyed.
 
 The state of your infrastructure has been saved to the path
 below. This state is required to modify and destroy your
@@ -160,71 +77,73 @@ State path: terraform.tfstate
 
 Outputs:
 
-  kubernetes-api-server = https://203.0.113.158:6443
+  kubernetes-controller = $ ssh -A core@xx.xx.xx.xx
 ```
 
 ## Next Steps
 
-### Configure kubectl
-
-Replace `$kubernetes-api-server` with the terraform output. 
-Replace `$token` and `$user` with the info from `terraform/secrets/tokens.csv`.
+### Check its up
 
 ```
-kubectl config set-cluster kubestack --insecure-skip-tls-verify=true --server=$kubernetes-api-server
-kubectl config set-credentials kelseyhightower --token='$token'
-kubectl config set-context kubestack --cluster=kubestack --user=$user
-kubectl config use-context kubestack
-```
+$ ssh -A core@xx.xx.xx.xx
 
-```
-kubectl config view
-```
+$ /opt/bin/kubectl config use-context kubernetes
+switched to context "kubernetes".
 
-```
+$ kubectl config view
 apiVersion: v1
 clusters:
 - cluster:
     insecure-skip-tls-verify: true
-    server: $kubernetes-api-server
-  name: kubestack
+    server: https://127.0.0.1:6443
+  name: kubernetes
 contexts:
 - context:
-    cluster: kubestack
-    user: $user
-  name: kubestack
-current-context: kubestack
+    cluster: kubernetes
+    user: admin
+  name: kubernetes
+current-context: kubernetes
 kind: Config
 preferences: {}
 users:
-- name: $user
+- name: admin
   user:
-    token: $token
+    token: kubernetes
+
+$ kubectl get nodes  
+NAME          LABELS                               STATUS    AGE
+10.230.7.23   kubernetes.io/hostname=10.230.7.23   Ready     5m
 ```
 
-## Register the worker nodes
-
-Nodes will be named based on the following convention:
+### Run a container
 
 ```
-${cluster_name}-kube${count}.c.${project}.internal
+$ kubectl run my-nginx --image=nginx --replicas=1 --port=80
+replicationcontroller "my-nginx" created
+
+$ kubectl get pods
+NAME             READY     STATUS    RESTARTS   AGE
+my-nginx-k1zoe   1/1       Running   0          1m
 ```
 
-Edit `testing-kube0.c.kubestack.internal.json`
-
-``` 
-{
-  "kind": "Node",
-  "apiVersion": "v1beta3",
-  "metadata": {
-    "name": "testing-kube0.c.kubestack.internal"
-  },
-  "spec": {
-    "externalID": "testing-kube0.c.kubestack.internal"
-  }
-}
-```
+### Destroy it
 
 ```
-kubectl create -f testing-kube0.c.kubestack.internal.json
+$ terraform destroy \
+      -var "username=$OS_USERNAME" \
+      -var "password=$OS_PASSWORD" \
+      -var "tenant=$OS_TENANT_NAME" \
+      -var "auth_url=$OS_AUTH_URL" \
+      -var "discovery_url=${DISCOVERY_URL}"
+Do you really want to destroy?
+  Terraform will delete all your managed infrastructure.
+  There is no undo. Only 'yes' will be accepted to confirm.
+
+  Enter a value: yes
+...
+...
+openstack_compute_secgroup_v2.kubernetes_controller: Destruction complete
+openstack_compute_secgroup_v2.kubernetes_internal: Destruction complete
+
+Apply complete! Resources: 0 added, 0 changed, 12 destroyed.      
 ```

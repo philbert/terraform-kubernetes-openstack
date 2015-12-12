@@ -28,8 +28,8 @@ variable "region" {
     default = "us-central1"
 }
 
-variable "worker_count" {
-    default = 3
+variable "compute_count" {
+    default = 1
 }
 
 variable "zone" {
@@ -50,6 +50,14 @@ variable "floatingip_pool" {
 
 variable "kubernetes_flavor" {
     default = "m1.medium"
+}
+
+variable "kubernetes_token" {
+    default = "kubernetes"
+}
+
+variable "kubernetes_user" {
+    default = "admin"
 }
 
 variable "etcd_flavor" {
