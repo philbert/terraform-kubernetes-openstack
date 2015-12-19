@@ -1,17 +1,9 @@
-variable "discovery_url" {
-    default = ""
-}
-
 variable "flannel_backend" {
     default = "vxlan"
 }
 
 variable "flannel_network" {
     default = "10.10.0.0/16"
-}
-
-variable "etcd_image" {
-    default = "coreos"
 }
 
 variable "kubernetes_image" {
@@ -24,16 +16,8 @@ variable "portal_net" {
     default = "10.200.0.0/16"
 }
 
-variable "region" {
-    default = "us-central1"
-}
-
 variable "compute_count" {
     default = 1
-}
-
-variable "zone" {
-    default = "us-central1-a"
 }
 
 variable "cluster_name" {
@@ -60,10 +44,6 @@ variable "kubernetes_user" {
     default = "admin"
 }
 
-variable "etcd_flavor" {
-    default = "m1.small"
-}
-
 variable "username" {
   description = "Your openstack username"
 }
@@ -83,4 +63,19 @@ variable "auth_url" {
 variable "public_key_path" {
   description = "The path of the ssh pub key"
   default = "~/.ssh/id_rsa.pub"
+}
+
+variable "whitelist_network" {
+  description = "network to allow connectivity from"
+  default = "0.0.0.0/0"
+}
+
+variable "kubectl_version" {
+  description = "Version of kubectl binary to download"
+  default = "v1.1.2"
+}
+
+variable "generate_ssl" {
+  descripion = "set to 1 to regenerate SSL certificates/keys"
+  default = 0
 }

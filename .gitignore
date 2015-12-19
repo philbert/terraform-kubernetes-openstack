@@ -1,3 +1,6 @@
-*.tfstate
-*.tfstate.backup
-secrets/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/templates/discovery_url
+terraform/*.override
+terraform/ssl/admin*
+terraform/ssl/ca*

@@ -2,7 +2,7 @@
 
 forked from [kelseyhightower/kubernetes](https://github.com/kelseyhightower/kubernetes)
 
-Provision a Kubernetes cluster with [Packer](https://packer.io) and [Terraform](https://www.terraform.io) on Openstack
+Provision a Kubernetes cluster with [Terraform](https://www.terraform.io) on Openstack
 
 ## Status
 
@@ -10,25 +10,8 @@ Ready for testing. Over the next couple of weeks the repo should be generic enou
 
 ## Prep
 
-- [Install Packer](https://packer.io/docs/installation.html)
 - [Install Terraform](https://www.terraform.io/intro/getting-started/install.html)
-
-The Packer and Terraform configs assume your authentication JSON file is stored under `/etc/kubernetes-account.json`
-
-## Packer Images
-
-Immutable infrastructure is the future. Instead of using cloud-init to provision machines at boot we'll create a custom image using Packer.
-
-### Create the kubernetes Base Image
-
-This assumes you already have a coreos image in glance. You may need to 
-adjust `packer/settings.json` to match settings in your OpenStack cloud.
-
-```
-$ . ~/.stackrc
-$ cd packer
-$ packer build -var-file=settings.json kubernetes.json
-```
+- Upload a CoreOS image to glance.
 
 ## Terraform
 
@@ -45,25 +28,45 @@ $ eval $(ssh-agent -s)
 $ ssh-add ~/.ssh/id_rsa
 ```
 
+Ensure that you have your Openstack credentials loaded into environment variables. Likely via a command similar to:
+
+```
+$ $ source ~/.stackrc
+```
 
 ### Provision the Kubernetes Cluster
 
+If you wish to re-use previously generated SSL key/certs for CA and admin, simply omit the `-var "generate_ssl=1" \` lines below.
+
+It can take some time for the `kubernetes-api` to come online.  Do not be surprised if you see a series of failed `curl` commands, this is just a `terraform` provisioning script waiting until it can access the api before moving on.
+
 ```
 $ cd terraform
-$ export DISCOVERY_URL=$(curl -s 'https://discovery.etcd.io/new?size=1')
+$ export MY_IP=$(curl -s icanhazip.com)
 $ terraform plan \
       -var "username=$OS_USERNAME" \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
       -var "auth_url=$OS_AUTH_URL" \
-      -var "discovery_url=${DISCOVERY_URL}"
+      -var "discovery_url=${DISCOVERY_URL}" \
+      -var "generate_ssl=1" \
+      -var "whitelist_network=${MY_IP}/32"
+Refreshing Terraform state prior to plan...
+...
+...
++ template_file.discovery_url
+    rendered: "" => "<computed>"
+    template: "" => "templates/discovery_url"
+
+Plan: 12 to add, 0 to change, 0 to destroy.
 
 $ terraform apply \
       -var "username=$OS_USERNAME" \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
       -var "auth_url=$OS_AUTH_URL" \
-      -var "discovery_url=${DISCOVERY_URL}"
+      -var "generate_ssl=1" \
+      -var "whitelist_network=${MY_IP}/32"
 ...
 ...
 Apply complete! Resources: 12 added, 0 changed, 0 destroyed.
@@ -115,26 +118,44 @@ NAME          LABELS                               STATUS    AGE
 10.230.7.23   kubernetes.io/hostname=10.230.7.23   Ready     5m
 ```
 
+
+```
+            "/opt/bin/kubectl create -f /opt/kubernetes/cluster/addons/kube-ui/kube-ui-rc.yaml --namespace=kube-system",
+            "/opt/bin/kubectl create -f /opt/kubernetes/cluster/addons/kube-ui/kube-ui-svc.yaml --namespace=kube-system"
+```
+
 ### Run a container
 
 ```
 $ kubectl run my-nginx --image=nginx --replicas=1 --port=80
 replicationcontroller "my-nginx" created
 
+$ kubectl expose rc my-nginx --port=80 --type=LoadBalancer
+service "my-nginx" exposed
+$ kubectl get svc my-nginx
+NAME       CLUSTER_IP      EXTERNAL_IP   PORT(S)   SELECTOR       AGE
+my-nginx   10.200.43.104                 80/TCP    run=my-nginx   6s
+
 $ kubectl get pods
 NAME             READY     STATUS    RESTARTS   AGE
 my-nginx-k1zoe   1/1       Running   0          1m
+
+$ kubectl delete rc my-nginx
+replicationcontroller "my-nginx" deleted
+$ kubectl delete svc my-nginx
+service "my-nginx" deleted
 ```
 
-### Destroy it
+### Destroy the cluster
+
+Once you're done with it, don't forget to nuke the whole thing.
 
 ```
 $ terraform destroy \
       -var "username=$OS_USERNAME" \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
-      -var "auth_url=$OS_AUTH_URL" \
-      -var "discovery_url=${DISCOVERY_URL}"
+      -var "auth_url=$OS_AUTH_URL"
 Do you really want to destroy?
   Terraform will delete all your managed infrastructure.
   There is no undo. Only 'yes' will be accepted to confirm.
