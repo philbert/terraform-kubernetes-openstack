@@ -17,7 +17,7 @@ variable "portal_net" {
 }
 
 variable "compute_count" {
-    default = 1
+    default = 2
 }
 
 variable "cluster_name" {
@@ -77,5 +77,5 @@ variable "kubectl_version" {
 
 variable "generate_ssl" {
   descripion = "set to 1 to regenerate SSL certificates/keys"
-  default = 0
+  default = 1
 }

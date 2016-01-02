@@ -1,6 +1,6 @@
 # Kubernetes on Openstack with Terraform
 
-forked from [kelseyhightower/kubernetes](https://github.com/kelseyhightower/kubernetes)
+forked from [kelseyhightower/kubestack](https://github.com/kelseyhightower/kubestack)
 
 Provision a Kubernetes cluster with [Terraform](https://www.terraform.io) on Openstack
 
@@ -36,7 +36,7 @@ $ $ source ~/.stackrc
 
 ### Provision the Kubernetes Cluster
 
-If you wish to re-use previously generated SSL key/certs for CA and admin, simply omit the `-var "generate_ssl=1" \` lines below.
+If you wish to re-use previously generated SSL key/certs for CA and admin, simply add `-var "generate_ssl=0" \`.
 
 It can take some time for the `kubernetes-api` to come online.  Do not be surprised if you see a series of failed `curl` commands, this is just a `terraform` provisioning script waiting until it can access the api before moving on.
 
@@ -48,8 +48,6 @@ $ terraform plan \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
       -var "auth_url=$OS_AUTH_URL" \
-      -var "discovery_url=${DISCOVERY_URL}" \
-      -var "generate_ssl=1" \
       -var "whitelist_network=${MY_IP}/32"
 Refreshing Terraform state prior to plan...
 ...
@@ -65,7 +63,6 @@ $ terraform apply \
       -var "password=$OS_PASSWORD" \
       -var "tenant=$OS_TENANT_NAME" \
       -var "auth_url=$OS_AUTH_URL" \
-      -var "generate_ssl=1" \
       -var "whitelist_network=${MY_IP}/32"
 ...
 ...
@@ -90,7 +87,7 @@ Outputs:
 ```
 $ ssh -A core@xx.xx.xx.xx
 
-$ /opt/bin/kubectl config use-context kubernetes
+$ kubectl config use-context kubernetes
 switched to context "kubernetes".
 
 $ kubectl config view
@@ -119,11 +116,6 @@ NAME          LABELS                               STATUS    AGE
 ```
 
 
-```
-            "/opt/bin/kubectl create -f /opt/kubernetes/cluster/addons/kube-ui/kube-ui-rc.yaml --namespace=kube-system",
-            "/opt/bin/kubectl create -f /opt/kubernetes/cluster/addons/kube-ui/kube-ui-svc.yaml --namespace=kube-system"
-```
-
 ### Run a container
 
 ```
@@ -145,6 +137,14 @@ replicationcontroller "my-nginx" deleted
 $ kubectl delete svc my-nginx
 service "my-nginx" deleted
 ```
+
+### Install some addons
+
+```
+/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-dns-rc.yaml --namespace=kube-system
+/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-dns-svc.yaml --namespace=kube-system
+```
+
 
 ### Destroy the cluster
 

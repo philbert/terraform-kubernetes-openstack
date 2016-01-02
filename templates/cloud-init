@@ -6,11 +6,6 @@ coreos:
       mask: true
     - name: etcd2.service
       command: start
-    - name: docker.service
-      command: start
-    - name: update-engine.service
-      command: stop
-      enable: false
     - name: flanneld.service
       command: start
       drop-ins:
@@ -21,7 +16,6 @@ coreos:
   flannel:
     interface: $private_ipv4
   etcd2:
-    # generate a new token for each unique cluster from https://discovery.etcd.io/new
     discovery: ${discovery_url}
     advertise-client-urls: http://$private_ipv4:2379
     initial-advertise-peer-urls: http://$private_ipv4:2380

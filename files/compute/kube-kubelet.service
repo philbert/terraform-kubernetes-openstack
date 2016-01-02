@@ -1,10 +1,15 @@
+[Unit]
+Description=kubelet service
+Requires=flanneld.service
+After=flanneld.service
+
 [Service]
 ExecStart=/usr/bin/kubelet \
   --api_servers=https://CONTROLLER_HOST \
   --register-node=true \
   --allow-privileged=true \
   --config=/etc/kubernetes/manifests \
-  --hostname-override=ADVERTISE_IP \
+  --hostname-override=MY_IP \
   --cluster-dns=CLUSTER_DNS \
   --cluster-domain=cluster.local \
   --kubeconfig=/etc/kubernetes/compute-kubeconfig.yaml \
@@ -12,5 +17,6 @@ ExecStart=/usr/bin/kubelet \
   --tls-private-key-file=/etc/kubernetes/ssl/compute-key.pem
 Restart=always
 RestartSec=10
+
 [Install]
 WantedBy=multi-user.target

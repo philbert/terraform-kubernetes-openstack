@@ -1,7 +1,7 @@
 
 resource "openstack_compute_secgroup_v2" "kubernetes_controller" {
-  name = "${var.project}_kubernetes_api"
-  description = "kubernetes Security Group"
+  name = "${var.project}_kubernetes_controller"
+  description = "kubernetes Controller Security Group"
   rule {
     ip_protocol = "tcp"
     from_port = "443"
@@ -10,9 +10,26 @@ resource "openstack_compute_secgroup_v2" "kubernetes_controller" {
   }
 }
 
+resource "openstack_compute_secgroup_v2" "kubernetes_compute" {
+  name = "${var.project}_kubernetes_compute"
+  description = "kubernetes Compute Security Group"
+  rule {
+    ip_protocol = "tcp"
+    from_port = "443"
+    to_port = "443"
+    cidr = "${var.whitelist_network}"
+  }
+  rule {
+    ip_protocol = "tcp"
+    from_port = "80"
+    to_port = "80"
+    cidr = "${var.whitelist_network}"
+  }
+}
+
 resource "openstack_compute_secgroup_v2" "kubernetes_base" {
   name = "${var.project}_kubernetes_base"
-  description = "kubernetes Security Group"
+  description = "kubernetes Base Security Group"
   rule {
     ip_protocol = "tcp"
     from_port = "22"

@@ -7,7 +7,7 @@ resource "null_resource" "discovery_url_template" {
 resource "null_resource" "generate_ssl" {
     count = "${var.generate_ssl}"
     provisioner "local-exec" {
-        command = "bash ssl/generate-ssl.sh"
+        command = "bash files/ssl/generate-ssl.sh"
     }
 }
 
@@ -71,14 +71,7 @@ resource "openstack_compute_instance_v2" "controller" {
     floating_ip = "${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}"
     user_data = "${template_file.controller_cloud_init.rendered}"
     provisioner "file" {
-        source = "ssl"
-        destination = "/tmp/kubernetes-ssl"
-        connection {
-            user = "core"
-        }
-    }
-    provisioner "file" {
-        source = "files/controller"
+        source = "files"
         destination = "/tmp/stage"
         connection {
             user = "core"
@@ -90,9 +83,11 @@ resource "openstack_compute_instance_v2" "controller" {
             "sudo wget -q -O /opt/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/${var.kubectl_version}/bin/linux/amd64/kubectl",
             "sudo chmod 0755 /opt/bin/kubectl",
             "sudo mkdir -p /etc/kubernetes/ssl",
-            "cd /tmp/kubernetes-ssl",
+            "cd /tmp/stage/ssl",
+            "echo \"subjectAltName = @alt_names\n[alt_names]\" >> openssl.cnf",
             "echo DNS.1 = kubernetes >> openssl.cnf",
             "echo DNS.2 = kubernetes.local >> openssl.cnf",
+            "echo DNS.3 = ${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}.xip.io >> openssl.cnf",
             "echo 'IP.1 = ${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}' >> openssl.cnf",
             "echo 'IP.3 = ${cidrhost(var.portal_net, count.index + 1)}' >> openssl.cnf",
             "echo 'IP.2 = ${self.network.0.fixed_ip_v4}' >> openssl.cnf",
@@ -102,20 +97,18 @@ resource "openstack_compute_instance_v2" "controller" {
             "sudo mv controller*.pem /etc/kubernetes/ssl",
             "sudo mv admin*.pem /etc/kubernetes/ssl",
             "sudo mv ca.pem /etc/kubernetes/ssl",
-            "sudo chown root:root /etc/kubernetes/ssl/*; sudo chmod 0600 /etc/kubernetes/ssl/*-key.pem",
-            "sudo chown core:core /etc/kubernetes/ssl/admin-key.pem",
-            "# rm -rf /tmp/kubernetes-ssl",
-            "mkdir -p /tmp/stage",
-            "sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/stage/*",
-            "sed -i 's/ADVERTISE_IP/${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}/' /tmp/stage/*",
-            "sed -i 's|PORTAL_NET|${var.portal_net}|' /tmp/stage/*",
-            "sed -i 's|CLUSTER_DNS|${cidrhost(var.portal_net, 200)}|' /tmp/stage/*",
+            "sudo chown root:core /etc/kubernetes/ssl/*; sudo chmod 0640 /etc/kubernetes/ssl/*-key.pem",
+            "sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/stage/*/*",
+            "sed -i 's/ADVERTISE_IP/${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}/' /tmp/stage/*/*",
+            "sed -i 's|PORTAL_NET|${var.portal_net}|' /tmp/stage/*/*",
+            "sed -i 's|CLUSTER_DNS|${cidrhost(var.portal_net, 200)}|' /tmp/stage/*/*",
             "sudo mkdir -p /etc/kubernetes/manifests",
-            "sudo mv /tmp/stage/*.yaml /etc/kubernetes/manifests/",
-            "sudo mv /tmp/stage/*.service /etc/systemd/system/",
-            "rm -rf /tmp/kubernetes-ssl",
-            "rm -rf /tmp/stage",
+            "sudo mv /tmp/stage/controller/*.yaml /etc/kubernetes/manifests/",
+            "sudo mv /tmp/stage/controller/*.service /etc/systemd/system/",
+            "sudo mv /tmp/stage/addons /etc/kubernetes/addons",
+            "#rm -rf /tmp/stage",
             "sudo systemctl daemon-reload",
+            "sudo systemctl restart docker",
             "sudo systemctl enable kube-kubelet",
             "sudo systemctl start kube-kubelet",
             "echo Wait until API comes online...",
@@ -142,17 +135,13 @@ resource "openstack_compute_instance_v2" "compute" {
     network {
         name = "${var.network_name}"
     }
-    security_groups = [ "${openstack_compute_secgroup_v2.kubernetes_base.name}" ]
+    security_groups = [
+        "${openstack_compute_secgroup_v2.kubernetes_base.name}",
+        "${openstack_compute_secgroup_v2.kubernetes_compute.name}"
+    ]
     user_data = "${template_file.compute_cloud_init.rendered}"
     provisioner "file" {
-        source = "ssl"
-        destination = "/tmp/kubernetes-ssl"
-        connection {
-            user = "core"
-        }
-    }
-    provisioner "file" {
-        source = "files/compute"
+        source = "files"
         destination = "/tmp/stage"
         connection {
             user = "core"
@@ -164,8 +153,8 @@ resource "openstack_compute_instance_v2" "compute" {
             "sudo wget -q -O /opt/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/${var.kubectl_version}/bin/linux/amd64/kubectl",
             "sudo chmod 0755 /opt/bin/kubectl",
             "sudo mkdir -p /etc/kubernetes/ssl",
-            "cd /tmp/kubernetes-ssl",
-            "sudo mkdir -p /etc/kubernetes/ssl",
+            "cd /tmp/stage/ssl",
+            "echo \"subjectAltName = @alt_names\n[alt_names]\" >> openssl.cnf",
             "echo 'IP.1 = ${self.network.0.fixed_ip_v4}' >> openssl.cnf",
             "openssl genrsa -out compute-key.pem 2048",
             "openssl req -new -key compute-key.pem -out compute.csr -subj '/CN=kubernetes-compute' -config openssl.cnf",
@@ -173,21 +162,19 @@ resource "openstack_compute_instance_v2" "compute" {
             "sudo mv compute-key.pem /etc/kubernetes/ssl",
             "sudo mv compute.pem /etc/kubernetes/ssl",
             "sudo mv ca.pem /etc/kubernetes/ssl",
-            "sudo chown root:root /etc/kubernetes/ssl/*; sudo chmod 0600 /etc/kubernetes/ssl/*-key.pem",
-            "rm -rf /tmp/kubernetes-ssl",
-            "mkdir -p /tmp/stage",
-            "sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/stage/*",
-            "sed -i 's/ADVERTISE_IP/${element(openstack_networking_floatingip_v2.compute.*.address, count.index)}/' /tmp/stage/*",
-            "sed -i 's/CONTROLLER_HOST/${openstack_compute_instance_v2.controller.0.network.0.fixed_ip_v4}/' /tmp/stage/*",
-            "sed -i 's|PORTAL_NET|${var.portal_net}|' /tmp/stage/*",
-            "sed -i 's|CLUSTER_DNS|${cidrhost(var.portal_net, 200)}|' /tmp/stage/*",
+            "sudo chown root:core /etc/kubernetes/ssl/*; sudo chmod 0640 /etc/kubernetes/ssl/*-key.pem",
+            "sed -i 's/MY_IP/${self.network.0.fixed_ip_v4}/' /tmp/stage/*/*",
+            "sed -i 's/ADVERTISE_IP/${element(openstack_networking_floatingip_v2.compute.*.address, count.index)}/' /tmp/stage/*/*",
+            "sed -i 's/CONTROLLER_HOST/${openstack_compute_instance_v2.controller.0.network.0.fixed_ip_v4}/' /tmp/stage/*/*",
+            "sed -i 's|PORTAL_NET|${var.portal_net}|' /tmp/stage/*/*",
+            "sed -i 's|CLUSTER_DNS|${cidrhost(var.portal_net, 200)}|' /tmp/stage/*/*",
             "sudo mkdir -p /etc/kubernetes/manifests",
-            "sudo mv /tmp/stage/*.yaml /etc/kubernetes/manifests/",
-            "sudo mv /tmp/stage/*.service /etc/systemd/system/",
-            "sudo mv /tmp/stage/compute-kubeconfig.yaml.config /etc/kubernetes/compute-kubeconfig.yaml",
-            "rm -rf /tmp/kubernetes-ssl",
-            "rm -rf /tmp/stage",
+            "sudo mv /tmp/stage/compute/*.yaml /etc/kubernetes/manifests/",
+            "sudo mv /tmp/stage/compute/*.service /etc/systemd/system/",
+            "sudo mv /tmp/stage/compute/compute-kubeconfig.yaml.config /etc/kubernetes/compute-kubeconfig.yaml",
+            "#rm -rf /tmp/stage",
             "sudo systemctl daemon-reload",
+            "sudo systemctl restart docker",
             "sudo systemctl enable kube-kubelet",
             "sudo systemctl start kube-kubelet",
         ]
@@ -210,8 +197,11 @@ resource "null_resource" "controller" {
             "  --certificate-authority=/etc/kubernetes/ssl/ca.pem \\",
             "  --client-key=/etc/kubernetes/ssl/admin-key.pem \\",
             "  --client-certificate=/etc/kubernetes/ssl/admin.pem",
+            "/opt/bin/kubectl config set-context ${var.kubernetes_user} --cluster=${var.cluster_name} --user=${var.kubernetes_user}",
             "/opt/bin/kubectl config set-context kubernetes --cluster=${var.cluster_name} --user=${var.kubernetes_user}",
             "/opt/bin/kubectl config use-context kubernetes",
+            "/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-ui-rc.yaml --namespace=kube-system",
+            "/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-ui-svc.yaml --namespace=kube-system",
         ]
         connection {
             user = "core"
