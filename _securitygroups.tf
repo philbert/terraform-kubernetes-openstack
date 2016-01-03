@@ -8,21 +8,21 @@ resource "openstack_compute_secgroup_v2" "kubernetes_controller" {
     to_port = "443"
     cidr = "${var.whitelist_network}"
   }
+  rule {
+    ip_protocol = "icmp"
+    from_port = "-1"
+    to_port = "-1"
+    cidr = "${var.whitelist_network}"
+  }
 }
 
 resource "openstack_compute_secgroup_v2" "kubernetes_compute" {
   name = "${var.project}_kubernetes_compute"
   description = "kubernetes Compute Security Group"
   rule {
-    ip_protocol = "tcp"
-    from_port = "443"
-    to_port = "443"
-    cidr = "${var.whitelist_network}"
-  }
-  rule {
-    ip_protocol = "tcp"
-    from_port = "80"
-    to_port = "80"
+    ip_protocol = "icmp"
+    from_port = "-1"
+    to_port = "-1"
     cidr = "${var.whitelist_network}"
   }
 }
@@ -34,12 +34,6 @@ resource "openstack_compute_secgroup_v2" "kubernetes_base" {
     ip_protocol = "tcp"
     from_port = "22"
     to_port = "22"
-    cidr = "${var.whitelist_network}"
-  }
-  rule {
-    ip_protocol = "icmp"
-    from_port = "-1"
-    to_port = "-1"
     cidr = "${var.whitelist_network}"
   }
   rule {

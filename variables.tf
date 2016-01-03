@@ -75,6 +75,11 @@ variable "kubectl_version" {
   default = "v1.1.2"
 }
 
+variable "hyperkube_version" {
+  description = "Version of the hypercube container to use"
+  default = "v1.1.2"
+}
+
 variable "generate_ssl" {
   descripion = "set to 1 to regenerate SSL certificates/keys"
   default = 1

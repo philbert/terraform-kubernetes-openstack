@@ -8,6 +8,8 @@ Provision a Kubernetes cluster with [Terraform](https://www.terraform.io) on Ope
 
 Ready for testing. Over the next couple of weeks the repo should be generic enough for reuse with complete documentation.
 
+Will install a single controller node and two compute nodes by default, can increase or decrease compute nodes using the Terraform variable `compute_count`.
+
 ## Prep
 
 - [Install Terraform](https://www.terraform.io/intro/getting-started/install.html)
@@ -31,7 +33,7 @@ $ ssh-add ~/.ssh/id_rsa
 Ensure that you have your Openstack credentials loaded into environment variables. Likely via a command similar to:
 
 ```
-$ $ source ~/.stackrc
+$ source ~/.stackrc
 ```
 
 ### Provision the Kubernetes Cluster
@@ -124,6 +126,7 @@ replicationcontroller "my-nginx" created
 
 $ kubectl expose rc my-nginx --port=80 --type=LoadBalancer
 service "my-nginx" exposed
+
 $ kubectl get svc my-nginx
 NAME       CLUSTER_IP      EXTERNAL_IP   PORT(S)   SELECTOR       AGE
 my-nginx   10.200.43.104                 80/TCP    run=my-nginx   6s
@@ -132,8 +135,16 @@ $ kubectl get pods
 NAME             READY     STATUS    RESTARTS   AGE
 my-nginx-k1zoe   1/1       Running   0          1m
 
+$ curl 10.200.43.104
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+
+
 $ kubectl delete rc my-nginx
 replicationcontroller "my-nginx" deleted
+
 $ kubectl delete svc my-nginx
 service "my-nginx" deleted
 ```
@@ -141,8 +152,14 @@ service "my-nginx" deleted
 ### Install some addons
 
 ```
-/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-dns-rc.yaml --namespace=kube-system
-/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-dns-svc.yaml --namespace=kube-system
+$ kubectl create -f /etc/kubernetes/addons/kube-ui-rc.yaml \
+    --namespace=kube-system
+$ kubectl create -f /etc/kubernetes/addons/kube-ui-svc.yaml \
+    --namespace=kube-system
+$ kubectl create -f /etc/kubernetes/addons/kube-dns-rc.yaml \
+    --namespace=kube-system
+$ kubectl create -f /etc/kubernetes/addons/kube-dns-svc.yaml \
+    --namespace=kube-system
 ```
 
 

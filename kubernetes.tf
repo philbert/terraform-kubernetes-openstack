@@ -102,6 +102,7 @@ resource "openstack_compute_instance_v2" "controller" {
             "sed -i 's/ADVERTISE_IP/${element(openstack_networking_floatingip_v2.controller.*.address, count.index)}/' /tmp/stage/*/*",
             "sed -i 's|PORTAL_NET|${var.portal_net}|' /tmp/stage/*/*",
             "sed -i 's|CLUSTER_DNS|${cidrhost(var.portal_net, 200)}|' /tmp/stage/*/*",
+            "sed -i 's|HYPERKUBE_VERSION|${var.hyperkube_version}|' /tmp/stage/*/*",
             "sudo mkdir -p /etc/kubernetes/manifests",
             "sudo mv /tmp/stage/controller/*.yaml /etc/kubernetes/manifests/",
             "sudo mv /tmp/stage/controller/*.service /etc/systemd/system/",
@@ -199,9 +200,6 @@ resource "null_resource" "controller" {
             "  --client-certificate=/etc/kubernetes/ssl/admin.pem",
             "/opt/bin/kubectl config set-context ${var.kubernetes_user} --cluster=${var.cluster_name} --user=${var.kubernetes_user}",
             "/opt/bin/kubectl config set-context kubernetes --cluster=${var.cluster_name} --user=${var.kubernetes_user}",
-            "/opt/bin/kubectl config use-context kubernetes",
-            "/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-ui-rc.yaml --namespace=kube-system",
-            "/opt/bin/kubectl create -f /etc/kubernetes/addons/kube-ui-svc.yaml --namespace=kube-system",
         ]
         connection {
             user = "core"
