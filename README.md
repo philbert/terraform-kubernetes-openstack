@@ -13,7 +13,8 @@ Will install a single controller node and two compute nodes by default, can incr
 ## Prep
 
 - [Install Terraform](https://www.terraform.io/intro/getting-started/install.html)
-- Upload a CoreOS image to glance.
+- Upload a CoreOS image to glance. (make sure this is from the alpha channel
+  which contains kubelet)
 
 ## Terraform
 
